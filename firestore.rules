@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // 1. GLOBAL SAFETY NET
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. PRIMITIVES & HELPERS
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. VALIDATION HELPERS
+    // -------------------------------------------------------------------------
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             data.email is string &&
+             data.role in ['admin', 'member'];
+    }
+
+    function isValidGoal(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.period in ['1m', '6m', '12m'] &&
+             data.status in ['active', 'completed', 'archived'] &&
+             data.createdBy is string;
+    }
+
+    function isValidTask(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.assigneeId is string &&
+             data.status in ['todo', 'in-progress', 'done', 'stuck'] &&
+             data.createdBy is string;
+    }
+
+    function isValidMessage(data) {
+      return data.senderId == request.auth.uid &&
+             data.content is string && data.content.size() <= 2000;
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. COLLECTION RULES
+    // -------------------------------------------------------------------------
+
+    // Users
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastActive'])
+      ) || isAdmin();
+    }
+
+    // Goals
+    match /goals/{goalId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidGoal(incoming());
+      allow update: if isAdmin() && isValidGoal(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Tasks
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidTask(incoming());
+      allow update: if isSignedIn() && isValidTask(incoming()) && (
+        // Assignee can update status
+        (isOwner(existing().assigneeId) && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) ||
+        // Admin or creator can update anything
+        isAdmin() || isOwner(existing().createdBy)
+      );
+      allow delete: if isAdmin() || isOwner(existing().createdBy);
+    }
+
+    // Messages
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidMessage(incoming());
+      // No updates or deletes for chat for simplicity (integrity)
+    }
+
+    // Analysis
+    match /analysis/{analysisId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow create: if isAdmin(); // AI generated usually implies a server or admin role
+    }
+  }
+}

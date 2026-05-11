@@ -1,0 +1,341 @@
+import { useState, useEffect } from 'react';
+import { db, collection, onSnapshot, query, addDoc, serverTimestamp, updateDoc, doc, deleteDoc, orderBy, getDocs } from '../lib/firebase';
+import { AppUser, Task, TaskStatus, TaskPriority } from '../types';
+import { 
+  Plus, 
+  Search, 
+  Filter, 
+  MoreVertical, 
+  Calendar as CalendarIcon,
+  User as UserIcon,
+  ChevronDown,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  FileSpreadsheet,
+  X
+} from 'lucide-react';
+import { cn, formatDate } from '../lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
+interface TasksBoardProps {
+  user: AppUser;
+}
+
+export default function TasksBoard({ user }: TasksBoardProps) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // New task form state
+  const [newTitle, setNewTitle] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
+
+  useEffect(() => {
+    const q = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task)));
+    });
+
+    const getUsers = async () => {
+        const uSnap = await getDocs(collection(db, 'users'));
+        setUsers(uSnap.docs.map(d => d.data() as AppUser));
+    };
+    getUsers();
+
+    return () => unsub();
+  }, []);
+
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle || !newAssignee) return;
+
+    const assignee = users.find(u => u.uid === newAssignee);
+
+    await addDoc(collection(db, 'tasks'), {
+      title: newTitle,
+      description: '',
+      assigneeId: newAssignee,
+      assigneeName: assignee?.displayName || 'Pa emër',
+      dueDate: newDueDate || new Date().toISOString(),
+      status: TaskStatus.TODO,
+      priority: TaskPriority.MEDIUM,
+      createdAt: serverTimestamp(),
+      createdBy: user.uid
+    });
+
+    setNewTitle('');
+    setNewAssignee('');
+    setNewDueDate('');
+    setIsAdding(false);
+  };
+
+  const updateStatus = async (taskId: string, status: TaskStatus) => {
+    await updateDoc(doc(db, 'tasks', taskId), { status });
+  };
+
+  const updatePriority = async (taskId: string, priority: TaskPriority) => {
+    await updateDoc(doc(db, 'tasks', taskId), { priority });
+  };
+
+  const deleteTask = async (taskId: string) => {
+    if (confirm('A jeni të sigurt që dëshironi të fshini këtë detyrë?')) {
+      await deleteDoc(doc(db, 'tasks', taskId));
+    }
+  };
+
+  const generatePDF = async () => {
+    const element = document.getElementById('tasks-table');
+    if (!element) return;
+    
+    const canvas = await html2canvas(element);
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const imgProps = pdf.getImageProperties(imgData);
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    pdf.save(`Raporti_Detyrave_${new Date().toLocaleDateString()}.pdf`);
+  };
+
+  const filteredTasks = tasks.filter(t => 
+    t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    t.assigneeName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const statusColors: Record<TaskStatus, { bg: string, text: string, label: string }> = {
+    [TaskStatus.TODO]: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Për të bërë' },
+    [TaskStatus.IN_PROGRESS]: { bg: 'bg-blue-100', text: 'text-blue-600', label: 'Në proces' },
+    [TaskStatus.DONE]: { bg: 'bg-emerald-100', text: 'text-emerald-600', label: 'E kryer' },
+    [TaskStatus.STUCK]: { bg: 'bg-red-100', text: 'text-red-600', label: 'E bllokuar' }
+  };
+
+  const priorityColors: Record<TaskPriority, { bg: string, text: string, label: string }> = {
+    [TaskPriority.LOW]: { bg: 'bg-slate-100', text: 'text-slate-500', label: 'E ulët' },
+    [TaskPriority.MEDIUM]: { bg: 'bg-amber-100', text: 'text-amber-600', label: 'Mesatare' },
+    [TaskPriority.HIGH]: { bg: 'bg-orange-100', text: 'text-orange-600', label: 'E lartë' },
+    [TaskPriority.CRITICAL]: { bg: 'bg-red-600', text: 'text-white', label: 'Kritike' }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Menaxhimi i Detyrave</h1>
+          <p className="text-slate-500">Organizoni dhe monitoroni punën e ekipit tuaj.</p>
+        </div>
+        <div className="flex items-center gap-3">
+            <button 
+                onClick={generatePDF}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-colors shadow-sm"
+            >
+                <FileSpreadsheet size={18} />
+                PDF
+            </button>
+            <button 
+                onClick={() => setIsAdding(true)}
+                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-lg"
+            >
+                <Plus size={18} />
+                Detyrë e Re
+            </button>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input 
+            type="text" 
+            placeholder="Kërko detyra ose persona..." 
+            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all shadow-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-medium text-sm hover:bg-slate-50 shadow-sm">
+            <Filter size={16} /> Filter
+        </button>
+      </div>
+
+      {/* Task Creation Modal */}
+      <AnimatePresence>
+        {isAdding && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-bold text-slate-900">Shto Detyrë të Re</h3>
+                <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleAddTask} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-slate-700">Emri i Detyrës</label>
+                  <input 
+                    autoFocus
+                    required
+                    type="text" 
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="Shkruaj çfarë duhet bërë..."
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1">
+                    <label className="text-sm font-bold text-slate-700">Personi (I caktuari)</label>
+                    <select 
+                        required
+                        value={newAssignee}
+                        onChange={(e) => setNewAssignee(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                    >
+                        <option value="">Zgjidh personin...</option>
+                        {users.map(u => (
+                            <option key={u.uid} value={u.uid}>{u.displayName}</option>
+                        ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-bold text-slate-700">Afati</label>
+                    <input 
+                      type="date" 
+                      value={newDueDate}
+                      onChange={(e) => setNewDueDate(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    type="button"
+                    onClick={() => setIsAdding(false)}
+                    className="flex-1 px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    Anulo
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700"
+                  >
+                    Ruaj Detyrën
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Task Table (Monday.com Style) */}
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden" id="tasks-table">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead>
+              <tr className="bg-slate-50 border-bottom border-slate-100">
+                <th className="p-5 font-bold text-slate-500 text-xs uppercase tracking-wider pl-8">Detyra</th>
+                <th className="p-5 font-bold text-slate-500 text-xs uppercase tracking-wider">Personi</th>
+                <th className="p-5 font-bold text-slate-500 text-xs uppercase tracking-wider">Statusi</th>
+                <th className="p-5 font-bold text-slate-500 text-xs uppercase tracking-wider">Prioriteti</th>
+                <th className="p-5 font-bold text-slate-500 text-xs uppercase tracking-wider">Data</th>
+                <th className="p-5 w-16"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-20 text-center text-slate-400 italic">
+                    Nuk u gjet asnjë detyrë.
+                  </td>
+                </tr>
+              ) : (
+                filteredTasks.map((task, i) => (
+                  <motion.tr 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    key={task.id} 
+                    className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group"
+                  >
+                    <td className="p-5 pl-8 font-semibold text-slate-900">{task.title}</td>
+                    <td className="p-5">
+                      <div className="flex items-center gap-2">
+                        <img 
+                          src={`https://ui-avatars.com/api/?name=${encodeURIComponent(task.assigneeName)}&background=random`} 
+                          alt="" 
+                          className="w-7 h-7 rounded-full shadow-sm"
+                        />
+                        <span className="text-sm font-medium text-slate-700">{task.assigneeName}</span>
+                      </div>
+                    </td>
+                    <td className="p-5">
+                      <div className="relative group/select w-fit">
+                        <select 
+                          value={task.status}
+                          onChange={(e) => updateStatus(task.id, e.target.value as TaskStatus)}
+                          className={cn(
+                            "text-xs font-bold px-3 py-1.5 pr-8 rounded-lg outline-none cursor-pointer appearance-none transition-all",
+                            statusColors[task.status].bg,
+                            statusColors[task.status].text
+                          )}
+                        >
+                          {Object.entries(statusColors).map(([key, val]) => (
+                            <option key={key} value={key} className="bg-white text-slate-900">{val.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className={cn("absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50", statusColors[task.status].text)} size={14} />
+                      </div>
+                    </td>
+                    <td className="p-5">
+                      <div className="relative group/select w-fit">
+                        <select 
+                          value={task.priority}
+                          onChange={(e) => updatePriority(task.id, e.target.value as TaskPriority)}
+                          className={cn(
+                            "text-xs font-bold px-3 py-1.5 pr-8 rounded-lg outline-none cursor-pointer appearance-none transition-all",
+                            priorityColors[task.priority].bg,
+                            priorityColors[task.priority].text
+                          )}
+                        >
+                           {Object.entries(priorityColors).map(([key, val]) => (
+                            <option key={key} value={key} className="bg-white text-slate-900">{val.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className={cn("absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50", priorityColors[task.priority].text)} size={14} />
+                      </div>
+                    </td>
+                    <td className="p-5 text-sm text-slate-500 font-medium">
+                      {formatDate(task.dueDate)}
+                    </td>
+                    <td className="p-5 text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => deleteTask(task.id)}
+                        className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </motion.tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+

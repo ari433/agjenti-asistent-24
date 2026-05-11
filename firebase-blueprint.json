@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the platform.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "member"] },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Goal": {
+      "title": "Goal",
+      "description": "Strategic goals set by management.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "period": { "type": "string", "enum": ["1m", "6m", "12m"] },
+        "status": { "type": "string", "enum": ["active", "completed", "archived"] },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "period", "status", "createdBy"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A specific duty assigned to a person.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "assigneeName": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["todo", "in-progress", "done", "stuck"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["title", "assigneeId", "status", "createdBy"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Team chat message.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderPhoto": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "content", "createdAt"]
+    },
+    "PerformanceAnalysis": {
+      "title": "PerformanceAnalysis",
+      "description": "AI-generated performance reports.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "analysis": { "type": "string" },
+        "score": { "type": "number" },
+        "period": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "analysis", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and roles."
+    },
+    "/goals/{goalId}": {
+      "schema": "Goal",
+      "description": "Company goals."
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Team tasks."
+    },
+    "/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Real-time team chat."
+    },
+    "/analysis/{analysisId}": {
+      "schema": "PerformanceAnalysis",
+      "description": "AI Performance records."
+    }
+  }
+}
