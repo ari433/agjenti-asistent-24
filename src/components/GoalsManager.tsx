@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, collection, onSnapshot, query, addDoc, serverTimestamp, updateDoc, doc, deleteDoc, orderBy } from '../lib/firebase';
+import { db, collection, onSnapshot, query, addDoc, serverTimestamp, updateDoc, doc, deleteDoc, orderBy, where } from '../lib/firebase';
 import { AppUser, Goal, GoalPeriod, GoalStatus, TaskStatus } from '../types';
 import { 
   Plus, 
@@ -44,12 +44,18 @@ export default function GoalsManager({ user }: GoalsManagerProps) {
   const [period, setPeriod] = useState<GoalPeriod>('1m');
 
   useEffect(() => {
-    const q = query(collection(db, 'goals'), orderBy('createdAt', 'desc'));
+    if (!user.companyId) return;
+
+    const q = query(
+      collection(db, 'goals'), 
+      where('companyId', '==', user.companyId),
+      orderBy('createdAt', 'desc')
+    );
     const unsub = onSnapshot(q, (snapshot) => {
       setGoals(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Goal)));
     });
     return () => unsub();
-  }, []);
+  }, [user.companyId]);
 
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,7 +70,8 @@ export default function GoalsManager({ user }: GoalsManagerProps) {
       period,
       status: 'active',
       createdAt: serverTimestamp(),
-      createdBy: user.uid
+      createdBy: user.uid,
+      companyId: user.companyId
     });
     
     setTitle('');
@@ -111,7 +118,8 @@ export default function GoalsManager({ user }: GoalsManagerProps) {
           ...g,
           status: 'active',
           createdAt: serverTimestamp(),
-          createdBy: user.uid
+          createdBy: user.uid,
+          companyId: user.companyId
         });
       }
 
@@ -122,7 +130,8 @@ export default function GoalsManager({ user }: GoalsManagerProps) {
           assigneeId: user.uid,
           reporterId: user.uid,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          companyId: user.companyId
         });
       }
 

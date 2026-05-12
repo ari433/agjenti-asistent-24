@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { db, collection, onSnapshot, query, addDoc, serverTimestamp, orderBy, limit } from '../lib/firebase';
+import { db, collection, onSnapshot, query, addDoc, serverTimestamp, orderBy, limit, where } from '../lib/firebase';
 import { AppUser, ChatMessage } from '../types';
 import { Send, Image as ImageIcon, Smile, MoreHorizontal, MessageCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -15,12 +15,19 @@ export default function TeamChat({ user }: TeamChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'messages'), orderBy('createdAt', 'asc'), limit(100));
+    if (!user.companyId) return;
+
+    const q = query(
+      collection(db, 'messages'), 
+      where('companyId', '==', user.companyId),
+      orderBy('createdAt', 'asc'), 
+      limit(100)
+    );
     const unsub = onSnapshot(q, (snapshot) => {
       setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage)));
     });
     return () => unsub();
-  }, []);
+  }, [user.companyId]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,7 +35,7 @@ export default function TeamChat({ user }: TeamChatProps) {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !user.companyId) return;
 
     const content = newMessage;
     setNewMessage('');
@@ -38,7 +45,8 @@ export default function TeamChat({ user }: TeamChatProps) {
       senderName: user.displayName,
       senderPhoto: user.photoURL,
       content,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      companyId: user.companyId
     });
   };
 

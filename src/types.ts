@@ -7,6 +7,31 @@ export interface AppUser {
   photoURL: string;
   role: UserRole;
   lastActive: any;
+  companyId?: string;
+  joinedAt?: any;
+  subscriptionPlan?: 'free' | 'pro' | 'unlimited';
+  subscriptionStatus?: 'active' | 'expired' | 'trial';
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  joinCode: string;
+  createdBy: string;
+  createdAt: any;
+  logo?: string;
+  trialStartedAt?: any;
+  subscriptionPlan?: 'free' | 'pro' | 'unlimited';
+  subscriptionStatus?: 'active' | 'expired' | 'trial';
+}
+
+export interface MarketingAsset {
+  id: string;
+  companyId: string;
+  url: string;
+  prompt: string;
+  type: 'poster' | 'social' | 'banner';
+  createdAt: any;
 }
 
 export type GoalPeriod = '1m' | '6m' | '12m';
@@ -20,6 +45,7 @@ export interface Goal {
   status: GoalStatus;
   createdBy: string;
   createdAt: any;
+  companyId: string;
 }
 
 export enum TaskStatus {
@@ -47,6 +73,31 @@ export interface Task {
   priority: TaskPriority;
   createdBy: string;
   createdAt: any;
+  companyId: string;
+  deliverables?: TaskDeliverable[];
+  aiAnalysis?: string;
+  isAiValidated?: boolean;
+}
+
+export interface TaskDeliverable {
+  id: string;
+  type: 'text' | 'link' | 'file';
+  content: string;
+  fileName?: string;
+  submittedAt: any;
+  submittedBy: string;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  companyId: string;
+  title: string;
+  message: string;
+  type: 'task' | 'message' | 'goal';
+  read: boolean;
+  relatedId?: string;
+  createdAt: any;
 }
 
 export interface ChatMessage {
@@ -56,6 +107,7 @@ export interface ChatMessage {
   senderPhoto: string;
   content: string;
   createdAt: any;
+  companyId: string;
 }
 
 export interface PerformanceAnalysis {

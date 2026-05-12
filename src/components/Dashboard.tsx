@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, collection, onSnapshot, query, where, orderBy, limit } from '../lib/firebase';
+import { db, collection, onSnapshot, query, where, orderBy, limit, getDocs } from '../lib/firebase';
 import { AppUser, Task, Goal, TaskStatus } from '../types';
 import { 
   CheckCircle2, 
@@ -12,7 +12,9 @@ import {
   Target,
   Sparkles,
   Zap,
-  Activity
+  Activity,
+  Users,
+  Image as ImageIcon
 } from 'lucide-react';
 import { askAI } from '../lib/gemini';
 import { motion } from 'framer-motion';
@@ -38,12 +40,29 @@ interface DashboardProps {
 export default function Dashboard({ user }: DashboardProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [membersCount, setMembersCount] = useState(0);
   const [aiAdvice, setAiAdvice] = useState<string>('');
   const [loadingAI, setLoadingAI] = useState(false);
 
   useEffect(() => {
-    const tasksQuery = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'), limit(10));
-    const goalsQuery = query(collection(db, 'goals'), where('status', '==', 'active'));
+    if (!user.companyId) return;
+
+    if (user.role === 'admin') {
+      const uQuery = query(collection(db, 'users'), where('companyId', '==', user.companyId));
+      getDocs(uQuery).then(snapshot => setMembersCount(snapshot.size));
+    }
+    
+    const tasksQuery = query(
+      collection(db, 'tasks'), 
+      where('companyId', '==', user.companyId),
+      orderBy('createdAt', 'desc'), 
+      limit(10)
+    );
+    const goalsQuery = query(
+      collection(db, 'goals'), 
+      where('companyId', '==', user.companyId),
+      where('status', '==', 'active')
+    );
 
     const unsubTasks = onSnapshot(tasksQuery, (snapshot) => {
       setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task)));
@@ -57,28 +76,35 @@ export default function Dashboard({ user }: DashboardProps) {
       unsubTasks();
       unsubGoals();
     };
-  }, []);
+  }, [user.companyId]); // Properly add dependencies
 
   const getAIAdvice = async () => {
+    if (loadingAI) return;
     setLoadingAI(true);
-    const context = `Përdoruesi: ${user.displayName}. Rolet: ${user.role}. Qëllimet aktive: ${goals.length}. Detyrat e fundit: ${tasks.map(t => t.title).join(', ')}.`;
-    const prompt = `Si një asistent strategjik i nivelit të lartë, analizo gjendjen aktuale të biznesit dhe jep një këshillë "Next-Level" për menaxherin (max 3 fjali).
-    Përdor gjuhën shqipe, ton profesional dhe vizionar.`;
-    const advice = await askAI(prompt, "Je një asistent ekzekutiv AI për biznese.");
-    setAiAdvice(advice || '');
-    setLoadingAI(false);
+    try {
+      const context = `Përdoruesi: ${user.displayName}. Rolet: ${user.role}. Qëllimet aktive: ${goals.length}. Detyrat e fundit: ${tasks.map(t => t.title).join(', ')}.`;
+      const prompt = `Si një asistent strategjik i nivelit të lartë, analizo gjendjen aktuale të biznesit dhe jep një këshillë "Next-Level" për menaxherin (max 3 fjali).
+      Përdor gjuhën shqipe, ton profesional dhe vizionar.`;
+      const advice = await askAI(prompt, "Je një asistent ekzekutiv AI për biznese.");
+      setAiAdvice(advice || '');
+    } catch (err) {
+      console.error("Dashboard AI Advice error:", err);
+    } finally {
+      setLoadingAI(false);
+    }
   };
 
+  // Only run initial advice once when tasks load first time
   useEffect(() => {
-    if (tasks.length > 0 || goals.length > 0) {
+    if (tasks.length > 0 && !aiAdvice && !loadingAI) {
       getAIAdvice();
     }
-  }, [tasks.length, goals.length]);
+  }, [tasks.length > 0]);
 
   const stats = [
     { label: 'Detyra Totale', value: tasks.length, icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50' },
     { label: 'Qëllime Aktive', value: goals.length, icon: Target, color: 'text-purple-600', bg: 'bg-purple-50' },
-    { label: 'Efikasiteti', value: '84%', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: user.role === 'admin' ? 'Anëtarë Ekipi' : 'Efikasiteti', value: user.role === 'admin' ? membersCount : '84%', icon: user.role === 'admin' ? Users : TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { label: 'Në Pritje', value: tasks.filter(t => t.status === TaskStatus.TODO).length, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
   ];
 
@@ -248,9 +274,22 @@ export default function Dashboard({ user }: DashboardProps) {
                         <span className="text-sm font-bold">Rishiko detyrat High-Priority</span>
                         <ArrowRight size={16} className="text-slate-500 group-hover:text-white transition-colors" />
                     </button>
-                    <button className="w-full text-left p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex items-center justify-between group">
-                        <span className="text-sm font-bold">Gjenero raportin e performancës</span>
+                    <button 
+                        onClick={() => {/* This will be handled by context or tab change */}}
+                        className="w-full text-left p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex items-center justify-between group"
+                    >
+                        <span className="text-sm font-bold">Gjenero Raportin e Performancës</span>
                         <ArrowRight size={16} className="text-slate-500 group-hover:text-white transition-colors" />
+                    </button>
+                    <button 
+                        onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'marketing' }))}
+                        className="w-full text-left p-4 bg-indigo-500/20 border border-indigo-500/30 rounded-2xl hover:bg-indigo-500/30 transition-all flex items-center justify-between group shadow-lg"
+                    >
+                        <div className="flex items-center gap-3">
+                            <ImageIcon size={18} className="text-indigo-300" />
+                            <span className="text-sm font-bold">Gjenero Imazh Marketingu</span>
+                        </div>
+                        <Sparkles size={16} className="text-amber-400 group-hover:scale-125 transition-transform" />
                     </button>
                 </div>
             </div>

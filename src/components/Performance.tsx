@@ -33,17 +33,27 @@ export default function Performance({ user }: PerformanceProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
+    if (!user.companyId) return;
+
     const getUsers = async () => {
-      const uSnap = await getDocs(collection(db, 'users'));
+      const q = query(
+        collection(db, 'users'),
+        where('companyId', '==', user.companyId)
+      );
+      const uSnap = await getDocs(q);
       setTeam(uSnap.docs.map(d => d.data() as AppUser));
     };
     getUsers();
-  }, []);
+  }, [user.companyId]);
 
   const fetchUserData = async (u: AppUser) => {
     setIsAnalyzing(true);
     setAnalysis('');
-    const q = query(collection(db, 'tasks'), where('assigneeId', '==', u.uid));
+    const q = query(
+      collection(db, 'tasks'), 
+      where('companyId', '==', user.companyId),
+      where('assigneeId', '==', u.uid)
+    );
     const snap = await getDocs(q);
     const userTasks = snap.docs.map(d => d.data() as Task);
     setTasks(userTasks);

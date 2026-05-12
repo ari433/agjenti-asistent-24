@@ -1,0 +1,21 @@
+{
+  "short_name": "Asistenti AI",
+  "name": "Asistenti AI - Menaxher Biznesi",
+  "icons": [
+    {
+      "src": "https://i.ibb.co/PZHvQNzh/634350365-1974948583450669-5304249738558335774-n.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://i.ibb.co/PZHvQNzh/634350365-1974948583450669-5304249738558335774-n.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4f46e5",
+  "background_color": "#0f172a"
+}

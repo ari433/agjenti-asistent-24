@@ -10,9 +10,24 @@
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
         "role": { "type": "string", "enum": ["admin", "member"] },
-        "lastActive": { "type": "string", "format": "date-time" }
+        "lastActive": { "type": "string", "format": "date-time" },
+        "companyId": { "type": "string" }
       },
       "required": ["uid", "email", "role"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "A business entity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "joinCode": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "logo": { "type": "string" }
+      },
+      "required": ["name", "joinCode", "createdBy"]
     },
     "Goal": {
       "title": "Goal",
@@ -25,9 +40,10 @@
         "period": { "type": "string", "enum": ["1m", "6m", "12m"] },
         "status": { "type": "string", "enum": ["active", "completed", "archived"] },
         "createdBy": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "companyId": { "type": "string" }
       },
-      "required": ["title", "period", "status", "createdBy"]
+      "required": ["title", "period", "status", "createdBy", "companyId"]
     },
     "Task": {
       "title": "Task",
@@ -43,9 +59,33 @@
         "status": { "type": "string", "enum": ["todo", "in-progress", "done", "stuck"] },
         "priority": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
         "createdAt": { "type": "string", "format": "date-time" },
-        "createdBy": { "type": "string" }
+        "createdBy": { "type": "string" },
+        "companyId": { "type": "string" },
+        "deliverables": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "aiAnalysis": { "type": "string" },
+        "isAiValidated": { "type": "boolean" }
       },
-      "required": ["title", "assigneeId", "status", "createdBy"]
+      "required": ["title", "assigneeId", "status", "createdBy", "companyId"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app notification for users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["task", "message", "goal"] },
+        "read": { "type": "boolean" },
+        "relatedId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "companyId", "title", "message", "read", "type"]
     },
     "ChatMessage": {
       "title": "ChatMessage",
@@ -57,9 +97,10 @@
         "senderName": { "type": "string" },
         "senderPhoto": { "type": "string" },
         "content": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "companyId": { "type": "string" }
       },
-      "required": ["senderId", "content", "createdAt"]
+      "required": ["senderId", "content", "createdAt", "companyId"]
     },
     "PerformanceAnalysis": {
       "title": "PerformanceAnalysis",
@@ -71,15 +112,20 @@
         "analysis": { "type": "string" },
         "score": { "type": "number" },
         "period": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "companyId": { "type": "string" }
       },
-      "required": ["userId", "analysis", "createdAt"]
+      "required": ["userId", "analysis", "createdAt", "companyId"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles and roles."
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Business organizations."
     },
     "/goals/{goalId}": {
       "schema": "Goal",
@@ -96,6 +142,10 @@
     "/analysis/{analysisId}": {
       "schema": "PerformanceAnalysis",
       "description": "AI Performance records."
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications."
     }
   }
 }

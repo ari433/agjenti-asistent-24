@@ -12,17 +12,21 @@ service cloud.firestore {
     // 2. PRIMITIVES & HELPERS
     // -------------------------------------------------------------------------
     function isSignedIn() {
-      return request.auth != null && request.auth.token.email_verified == true;
+      return request.auth != null;
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return isSignedIn() && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    function companyId() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') : '';
+    }
+
+    function isCompanyAdmin() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
     }
 
     function incoming() {
@@ -43,27 +47,43 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.uid == request.auth.uid &&
-             data.email is string &&
-             data.role in ['admin', 'member'];
+             data.email is string;
+    }
+
+    function isValidCompany(data) {
+      return data.name is string && data.name.size() <= 100 &&
+             data.joinCode is string && data.joinCode.size() <= 20 &&
+             data.createdBy == request.auth.uid;
     }
 
     function isValidGoal(data) {
       return data.title is string && data.title.size() <= 200 &&
              data.period in ['1m', '6m', '12m'] &&
              data.status in ['active', 'completed', 'archived'] &&
-             data.createdBy is string;
+             data.createdBy is string &&
+             data.companyId == companyId();
     }
 
     function isValidTask(data) {
       return data.title is string && data.title.size() <= 200 &&
              data.assigneeId is string &&
              data.status in ['todo', 'in-progress', 'done', 'stuck'] &&
-             data.createdBy is string;
+             data.createdBy is string &&
+             data.companyId == companyId();
+    }
+
+    function isValidNotification(data) {
+      return data.userId is string &&
+             data.companyId == companyId() &&
+             data.title is string && data.title.size() <= 200 &&
+             data.type in ['task', 'message', 'goal'] &&
+             data.read == false;
     }
 
     function isValidMessage(data) {
       return data.senderId == request.auth.uid &&
-             data.content is string && data.content.size() <= 2000;
+             data.content is string && data.content.size() <= 2000 &&
+             data.companyId == companyId();
     }
 
     // -------------------------------------------------------------------------
@@ -73,45 +93,66 @@ service cloud.firestore {
     // Users
     match /users/{userId} {
       allow get: if isSignedIn();
+      allow write: if isOwner(userId);
       allow list: if isSignedIn();
-      allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if isOwner(userId) && isValidUser(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastActive'])
-      ) || isAdmin();
+    }
+
+    // Companies
+    match /companies/{id} {
+      allow get, list, create, update: if isSignedIn();
+    }
+
+    // Join Codes
+    match /join_codes/{code} {
+      allow get, create, update: if isSignedIn();
+    }
+
+    // Marketing Assets
+    match /marketing_assets/{id} {
+      allow read: if isSignedIn() && resource.data.companyId == companyId();
+      allow create: if isSignedIn() && incoming().companyId == companyId();
+      allow delete: if isCompanyAdmin() && resource.data.companyId == companyId();
     }
 
     // Goals
     match /goals/{goalId} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin() && isValidGoal(incoming());
-      allow update: if isAdmin() && isValidGoal(incoming());
-      allow delete: if isAdmin();
+      allow read: if isSignedIn() && resource.data.companyId == companyId();
+      allow create: if isCompanyAdmin() && isValidGoal(incoming());
+      allow update: if isCompanyAdmin() && isValidGoal(incoming());
+      allow delete: if isCompanyAdmin();
     }
 
     // Tasks
     match /tasks/{taskId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && resource.data.companyId == companyId();
       allow create: if isSignedIn() && isValidTask(incoming());
       allow update: if isSignedIn() && isValidTask(incoming()) && (
-        // Assignee can update status
-        (isOwner(existing().assigneeId) && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) ||
+        // Assignee can update status or deliverables
+        (isOwner(existing().assigneeId) && incoming().diff(existing()).affectedKeys().hasAny(['status', 'deliverables'])) ||
         // Admin or creator can update anything
-        isAdmin() || isOwner(existing().createdBy)
+        isCompanyAdmin() || isOwner(existing().createdBy)
       );
-      allow delete: if isAdmin() || isOwner(existing().createdBy);
+      allow delete: if isCompanyAdmin() || isOwner(existing().createdBy);
     }
 
     // Messages
     match /messages/{messageId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && resource.data.companyId == companyId();
       allow create: if isSignedIn() && isValidMessage(incoming());
-      // No updates or deletes for chat for simplicity (integrity)
     }
 
     // Analysis
     match /analysis/{analysisId} {
-      allow read: if isOwner(resource.data.userId) || isAdmin();
-      allow create: if isAdmin(); // AI generated usually implies a server or admin role
+      allow read: if isOwner(resource.data.userId) || isCompanyAdmin();
+      allow create: if isCompanyAdmin();
+    }
+
+    // Notifications
+    match /notifications/{id} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isSignedIn() && isValidNotification(incoming());
+      allow update: if isOwner(resource.data.userId) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['read']);
     }
   }
 }
